@@ -24,14 +24,19 @@ export const RUNES = {
     damage: 10, adjective: 'Frost', short: 'I',
     onHit: (target) => {
       target.statuses ||= {};
-      target.statuses.slow = { ttl: 1.5, factor: 0.45, color: '#9ee0ff' };
+      target.statuses.chill = { ttl: 1.5, factor: 0.45, color: '#9ee0ff' };
     },
   },
   lightning: {
     id: 'lightning', name: 'Lightning', category: CATEGORY.ELEMENT,
     color: '#ffd84a', glow: '#fff09a',
     damage: 22, adjective: 'Shock', short: 'L',
-    onHit: () => {},
+    onHit: (target) => {
+      target.statuses ||= {};
+      const cur = target.statuses.shock;
+      const stack = cur ? Math.min(3, cur.stack + 1) : 1;
+      target.statuses.shock = { ttl: 1.2, dps: 2, stack, color: '#ffd84a' };
+    },
   },
   poison: {
     id: 'poison', name: 'Poison', category: CATEGORY.ELEMENT,
@@ -48,7 +53,10 @@ export const RUNES = {
     id: 'arcane', name: 'Arcane', category: CATEGORY.ELEMENT,
     color: '#c478ff', glow: '#e0a8ff',
     damage: 18, adjective: 'Arcane', short: 'A',
-    onHit: () => {},
+    onHit: (target) => {
+      target.statuses ||= {};
+      target.statuses.arcane_mark = { ttl: 3.0, color: '#c478ff' };
+    },
   },
 
   // ===== Forms =====

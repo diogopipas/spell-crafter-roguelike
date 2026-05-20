@@ -2,6 +2,8 @@
 // Each effect carries onHit/onExpire hooks; modifiers (in spells.js) register into these.
 
 import { dist, normalize, randRange, randInt, TAU, angleTo, rotate } from './util.js';
+import { applyElement } from './reactions.js';
+import { playSound } from './audio.js';
 
 let FX_ID = 1;
 const fxId = () => FX_ID++;
@@ -110,7 +112,17 @@ export function spawnNova(state, origin, dir, spec) {
 }
 
 export function spawnBeam(state, origin, dir, spec) {
-  const len = spec.length ?? 480;
+  let len = spec.length ?? 480;
+  // Clip the beam at the first wall along its path so it doesn't pass through.
+  if (state.world) {
+    const step = 4;
+    for (let d = step; d <= len; d += step) {
+      if (state.world.pixelBlocked(origin.x + dir.dx * d, origin.y + dir.dy * d, 1)) {
+        len = d;
+        break;
+      }
+    }
+  }
   const fx = {
     id: fxId(),
     type: 'beam',
@@ -263,6 +275,7 @@ export function spawnEnemyExplosion(state, e) {
   });
   burstParticles(state, e.x, e.y, '#ffb868', 20, { speed: 250, ttl: 0.6, size: 2.5 });
   state.screenShake = Math.max(state.screenShake, 8);
+  playSound('exploderBoom');
 }
 
 // ===== Effect update / collision =====
@@ -336,11 +349,12 @@ function applyHit(fx, target, state) {
   if (fx.hits) fx.hits.add(target.id);
   target.hp -= fx.damage;
   target.hitFlash = 0.12;
-  if (fx.element && fx.element.onHit) fx.element.onHit(target, fx);
+  if (fx.element) applyElement(fx.element, target, state, fx);
   if (fx.onHit) fx.onHit(fx, target, state);
   if (target.hp <= 0) target.dead = true;
   // Small impact particles.
   burstParticles(state, target.x, target.y, fx.color || '#fff', 6, { speed: 140, ttl: 0.35, size: 2 });
+  playSound('hit', { intensity: fx.damage });
   return true;
 }
 

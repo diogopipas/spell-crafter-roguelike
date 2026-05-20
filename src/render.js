@@ -137,7 +137,9 @@ function renderEnemies(ctx, state) {
     // Tint by statuses.
     if (e.statuses.burn) glow = '#ff7a4a';
     if (e.statuses.poison) color = blendColor(color, '#7be84a', 0.4);
-    if (e.statuses.slow) color = blendColor(color, '#5acaff', 0.4);
+    if (e.statuses.chill) color = blendColor(color, '#5acaff', 0.4);
+    if (e.statuses.shock) color = blendColor(color, '#ffd84a', 0.3);
+    if (e.statuses.arcane_mark) glow = '#e0a8ff';
 
     drawGlowCircle(ctx, e.x, e.y, e.radius, color, glow, 0.85);
 

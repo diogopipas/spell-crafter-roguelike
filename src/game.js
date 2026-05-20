@@ -8,6 +8,7 @@ import { input, consumePressed, isSuspended, endFrameInput } from './input.js';
 import { RUNES, CATEGORY, allRuneIds } from './runes.js';
 import { Camera, render, VIEW_W, VIEW_H } from './render.js';
 import { updateHUD, openCrafter, closeCrafter, toggleCrafter, showGameOver, hideGameOver, flashMessage, resetCrafter } from './ui.js';
+import { playSound } from './audio.js';
 import { clamp, normalize, dist, chance, pick, randRange } from './util.js';
 
 export class Game {
@@ -155,6 +156,7 @@ export class Game {
     if (this.player.dead) {
       this.state = 'gameover';
       showGameOver(`Reached Floor ${this.floor}.`);
+      playSound('gameOver');
     }
 
     endFrameInput();
@@ -217,6 +219,7 @@ export class Game {
 
     const dx = this.aim.x - p.x, dy = this.aim.y - p.y;
     const [ndx, ndy] = normalize(dx, dy);
+    playSound('cast', { element: slot.spell.element });
     slot.spell.cast(this, { x: p.x, y: p.y }, { dx: ndx, dy: ndy });
   }
 
@@ -229,6 +232,7 @@ export class Game {
         const rune = RUNES[p.runeId];
         flashMessage(`Picked up ${rune.name} rune.`);
         burstParticles(this, p.x, p.y, rune.color, 12, { speed: 180, ttl: 0.5 });
+        playSound('pickup');
       }
     }
     this.pickups = this.pickups.filter(p => !p.consumed);
@@ -237,6 +241,7 @@ export class Game {
   _checkStairs() {
     const [tx, ty] = pixelToTile(this.player.x, this.player.y);
     if (this.world.get(tx, ty) === TILE.STAIRS) {
+      playSound('floorDown');
       this.floor++;
       this._buildFloor(this.floor);
     }
@@ -260,6 +265,7 @@ export class Game {
     for (const e of this.enemies) {
       if (e.dead && !e._dropped) {
         e._dropped = true;
+        playSound('enemyDeath');
         if (chance(0.4)) {
           const pool = this._floorRunePool(this.floor);
           const runeId = pick(pool);

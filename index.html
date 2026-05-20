@@ -23,6 +23,12 @@
         <div class="spell-slot" data-slot="1"><div class="slot-key">2</div><div class="slot-runes"></div><div class="slot-name">—</div></div>
         <div class="spell-slot" data-slot="2"><div class="slot-key">3</div><div class="slot-runes"></div><div class="slot-name">—</div></div>
       </div>
+
+      <div id="audio-controls">
+        <button id="audio-mute" title="Mute (M)" aria-label="Mute">♪</button>
+        <label class="audio-row"><span>Music</span><input id="audio-music" type="range" min="0" max="100" value="55" /></label>
+        <label class="audio-row"><span>SFX</span><input id="audio-sfx" type="range" min="0" max="100" value="75" /></label>
+      </div>
     </div>
 
     <div id="crafter" class="hidden">
@@ -57,6 +63,14 @@
             <button id="craft-clear">Clear</button>
           </div>
         </div>
+      </div>
+    </div>
+
+    <div id="title-screen">
+      <div class="overlay-panel">
+        <h1>Spell Crafter</h1>
+        <p>A rune-crafting roguelike. Combine elements, forms, and modifiers.</p>
+        <button id="play-btn">Play (Space)</button>
       </div>
     </div>
 

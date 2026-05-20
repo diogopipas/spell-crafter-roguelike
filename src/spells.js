@@ -3,6 +3,7 @@
 
 import { RUNES, CATEGORY } from './runes.js';
 import { spawnProjectile, spawnNova, spawnBeam, spawnAura, spawnWall, spawnExplosion, nearestEnemy } from './effects.js';
+import { applyElement } from './reactions.js';
 import { normalize, angleTo, TAU, dist } from './util.js';
 
 // Validate that the trio covers each category exactly once.
@@ -189,7 +190,7 @@ function spawnChainArc(state, fromEnt, toEnt, element, damage, chainsLeft) {
   // Direct damage to the next target.
   toEnt.hp -= damage;
   toEnt.hitFlash = 0.12;
-  if (element.onHit) element.onHit(toEnt, null);
+  applyElement(element, toEnt, state, null);
   if (toEnt.hp <= 0) toEnt.dead = true;
 
   // Visual: short-lived beam from-to-target.

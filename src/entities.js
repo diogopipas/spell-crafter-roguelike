@@ -2,6 +2,7 @@
 
 import { dist, normalize, randRange, chance, pick, clamp, angleTo, TAU } from './util.js';
 import { TILE_SIZE, tileToPixel } from './world.js';
+import { playSound } from './audio.js';
 
 let ENT_ID = 1;
 const nextId = () => ENT_ID++;
@@ -33,6 +34,7 @@ export function damagePlayer(player, amount) {
   if (player.iframes > 0 || player.dead) return;
   player.hp -= amount;
   player.iframes = 0.6;
+  playSound('playerHurt');
   if (player.hp <= 0) {
     player.hp = 0;
     player.dead = true;
@@ -101,10 +103,10 @@ export function updateEnemy(e, dt, state) {
 
   // Apply statuses.
   let speedMul = 1;
-  if (e.statuses.slow) {
-    e.statuses.slow.ttl -= dt;
-    if (e.statuses.slow.ttl <= 0) delete e.statuses.slow;
-    else speedMul *= e.statuses.slow.factor;
+  if (e.statuses.chill) {
+    e.statuses.chill.ttl -= dt;
+    if (e.statuses.chill.ttl <= 0) delete e.statuses.chill;
+    else speedMul *= e.statuses.chill.factor;
   }
   if (e.statuses.burn) {
     e.statuses.burn.ttl -= dt;
@@ -115,6 +117,15 @@ export function updateEnemy(e, dt, state) {
     e.statuses.poison.ttl -= dt;
     e.hp -= e.statuses.poison.dps * dt;
     if (e.statuses.poison.ttl <= 0) delete e.statuses.poison;
+  }
+  if (e.statuses.shock) {
+    e.statuses.shock.ttl -= dt;
+    e.hp -= e.statuses.shock.dps * dt;
+    if (e.statuses.shock.ttl <= 0) delete e.statuses.shock;
+  }
+  if (e.statuses.arcane_mark) {
+    e.statuses.arcane_mark.ttl -= dt;
+    if (e.statuses.arcane_mark.ttl <= 0) delete e.statuses.arcane_mark;
   }
   if (e.hp <= 0) { e.dead = true; return; }
   if (e.hitFlash > 0) e.hitFlash -= dt;

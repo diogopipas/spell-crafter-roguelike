@@ -84,9 +84,18 @@ function equipCurrentRecipe(slotIdx) {
     flashMessage('Recipe incomplete.');
     return;
   }
+  for (const id of ids) {
+    if ((state.player.inventory[id] || 0) <= 0) {
+      flashMessage(`Out of ${RUNES[id].name} runes.`);
+      return;
+    }
+  }
   const spell = composeSpell(ids);
+  for (const id of ids) state.player.inventory[id]--;
   state.player.spellSlots[slotIdx] = { runes: ids, spell };
+  craftSlots = [null, null, null];
   flashMessage(`Equipped ${spell.name} to slot ${slotIdx + 1}.`);
+  renderCrafter();
   updateHUD();
 }
 
@@ -218,6 +227,14 @@ export function hideGameOver() {
 export function flashMessage(text) {
   const div = document.createElement('div');
   div.className = 'log-msg';
+  div.textContent = text;
+  els.messageLog.appendChild(div);
+  setTimeout(() => div.remove(), 3000);
+}
+
+export function flashReaction(text) {
+  const div = document.createElement('div');
+  div.className = 'log-msg log-reaction';
   div.textContent = text;
   els.messageLog.appendChild(div);
   setTimeout(() => div.remove(), 3000);
