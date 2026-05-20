@@ -1,0 +1,393 @@
+* { box-sizing: border-box; }
+html, body {
+  margin: 0;
+  padding: 0;
+  background: #07070b;
+  color: #e6e6f0;
+  font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  overflow: hidden;
+  height: 100%;
+  user-select: none;
+}
+
+#game-root {
+  position: relative;
+  width: 100vw;
+  height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+#game-canvas {
+  display: block;
+  background: #0a0a12;
+  cursor: crosshair;
+  image-rendering: pixelated;
+  max-width: 100%;
+  max-height: 100%;
+}
+
+/* ===== HUD ===== */
+#hud {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+#hud-bars {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 280px;
+}
+
+.bar {
+  display: grid;
+  grid-template-columns: 50px 1fr auto;
+  align-items: center;
+  gap: 8px;
+  background: rgba(10, 10, 18, 0.7);
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+}
+
+.bar-label {
+  font-weight: bold;
+  letter-spacing: 0.5px;
+  color: #c8c8d8;
+}
+
+.bar-track {
+  position: relative;
+  height: 12px;
+  background: #1a1a26;
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.bar-fill {
+  height: 100%;
+  transition: width 120ms ease-out;
+}
+
+.bar-fill.hp { background: linear-gradient(90deg, #e84545, #ff7a7a); box-shadow: 0 0 6px #ff5a5a inset; }
+.bar-fill.mp { background: linear-gradient(90deg, #4a7afe, #7fbfff); box-shadow: 0 0 6px #5a8aff inset; }
+
+.bar-text { font-variant-numeric: tabular-nums; color: #c8c8d8; }
+
+#hud-info {
+  position: absolute;
+  top: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  text-align: center;
+}
+#floor-indicator {
+  font-size: 18px;
+  font-weight: bold;
+  letter-spacing: 2px;
+  color: #d4c47a;
+  text-shadow: 0 0 8px rgba(212, 196, 122, 0.5);
+}
+.hint {
+  font-size: 11px;
+  color: #888;
+  margin-top: 4px;
+  background: rgba(10, 10, 18, 0.6);
+  padding: 4px 10px;
+  border-radius: 4px;
+  display: inline-block;
+}
+
+#spell-slots {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+}
+
+.spell-slot {
+  width: 160px;
+  background: rgba(10, 10, 18, 0.85);
+  border: 2px solid #2a2a40;
+  border-radius: 8px;
+  padding: 8px;
+  position: relative;
+  transition: border-color 120ms ease;
+}
+.spell-slot.active {
+  border-color: #d4c47a;
+  box-shadow: 0 0 12px rgba(212, 196, 122, 0.4);
+}
+.slot-key {
+  position: absolute;
+  top: 4px;
+  right: 6px;
+  font-size: 11px;
+  color: #888;
+  font-weight: bold;
+}
+.slot-runes {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 6px;
+  min-height: 18px;
+}
+.rune-gem {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  box-shadow: 0 0 6px currentColor;
+  background: currentColor;
+}
+.slot-name {
+  font-size: 12px;
+  color: #d4d4e0;
+  text-align: center;
+}
+
+/* ===== Crafter ===== */
+#crafter {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.75);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: auto;
+  z-index: 10;
+}
+#crafter.hidden { display: none; }
+
+.crafter-panel {
+  background: #11111c;
+  border: 1px solid #2a2a40;
+  border-radius: 8px;
+  width: 900px;
+  max-width: 95vw;
+  max-height: 90vh;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+}
+
+.crafter-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+.crafter-header h2 { margin: 0; color: #d4c47a; }
+#crafter-close {
+  background: transparent;
+  border: none;
+  color: #888;
+  font-size: 28px;
+  cursor: pointer;
+  width: 36px;
+  height: 36px;
+}
+#crafter-close:hover { color: #fff; }
+
+.crafter-body {
+  display: grid;
+  grid-template-columns: 1fr 360px;
+  gap: 24px;
+  overflow: hidden;
+}
+
+.crafter-left { overflow-y: auto; padding-right: 8px; }
+.crafter-left h3, .crafter-right h3 {
+  margin: 0 0 8px 0;
+  font-size: 13px;
+  letter-spacing: 1.5px;
+  color: #888;
+  text-transform: uppercase;
+}
+.rune-category-group { margin-bottom: 16px; }
+.rune-category-group h4 {
+  margin: 0 0 6px 0;
+  font-size: 11px;
+  color: #666;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+.rune-inventory {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.rune-card {
+  background: #1a1a26;
+  border: 1px solid #333;
+  border-radius: 6px;
+  padding: 8px 10px;
+  cursor: grab;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 130px;
+  transition: border-color 120ms ease, transform 80ms ease;
+}
+.rune-card:hover { border-color: #555; transform: translateY(-1px); }
+.rune-card.dragging { opacity: 0.5; }
+.rune-card.disabled { opacity: 0.35; cursor: not-allowed; }
+.rune-card .rune-gem { width: 18px; height: 18px; }
+.rune-card .rune-name { font-size: 12px; }
+.rune-card .rune-count { margin-left: auto; font-size: 11px; color: #888; }
+
+.craft-slots {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  margin-bottom: 12px;
+}
+.craft-slot {
+  width: 100px;
+  height: 100px;
+  background: #1a1a26;
+  border: 2px dashed #333;
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  color: #666;
+  cursor: pointer;
+  position: relative;
+}
+.craft-slot.drag-over { border-color: #d4c47a; background: #1f1f2e; }
+.craft-slot.filled { border-style: solid; border-color: #555; color: #d4d4e0; }
+.craft-slot .rune-gem { width: 32px; height: 32px; margin-bottom: 4px; }
+.craft-slot-label {
+  position: absolute;
+  top: 4px;
+  left: 0;
+  right: 0;
+  text-align: center;
+  font-size: 9px;
+  color: #555;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+#recipe-preview {
+  background: #14141f;
+  border: 1px solid #2a2a40;
+  border-radius: 6px;
+  padding: 12px;
+  margin-bottom: 12px;
+  min-height: 80px;
+}
+#recipe-name {
+  font-size: 16px;
+  font-weight: bold;
+  color: #d4c47a;
+  margin-bottom: 6px;
+}
+#recipe-stats {
+  font-size: 11px;
+  color: #aaa;
+  line-height: 1.6;
+}
+
+.equip-buttons {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+.equip-buttons button {
+  flex: 1;
+  background: #2a2a40;
+  border: 1px solid #444;
+  color: #e6e6f0;
+  padding: 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 11px;
+}
+.equip-buttons button:hover:not(:disabled) { background: #3a3a55; }
+.equip-buttons button:disabled { opacity: 0.4; cursor: not-allowed; }
+
+#craft-clear {
+  background: #1a1a26;
+  border: 1px solid #333;
+  color: #aaa;
+  padding: 6px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 11px;
+  width: 100%;
+}
+#craft-clear:hover { background: #2a2a40; color: #fff; }
+
+/* ===== Game Over ===== */
+#game-over {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.85);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 20;
+  pointer-events: auto;
+}
+#game-over.hidden { display: none; }
+.overlay-panel {
+  background: #11111c;
+  border: 1px solid #2a2a40;
+  border-radius: 8px;
+  padding: 32px;
+  text-align: center;
+  min-width: 320px;
+}
+.overlay-panel h1 {
+  color: #e84545;
+  margin: 0 0 12px 0;
+  letter-spacing: 4px;
+}
+.overlay-panel p { color: #aaa; margin-bottom: 20px; }
+.overlay-panel button {
+  background: #d4c47a;
+  border: none;
+  color: #11111c;
+  padding: 10px 20px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-weight: bold;
+  font-size: 14px;
+}
+.overlay-panel button:hover { background: #e8d99a; }
+
+/* ===== Message log ===== */
+#message-log {
+  position: absolute;
+  bottom: 130px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  pointer-events: none;
+}
+.log-msg {
+  background: rgba(10, 10, 18, 0.85);
+  border-radius: 4px;
+  padding: 4px 12px;
+  font-size: 12px;
+  color: #c8c8d8;
+  animation: fadeOut 3s ease-out forwards;
+}
+@keyframes fadeOut {
+  0% { opacity: 1; transform: translateY(0); }
+  70% { opacity: 1; }
+  100% { opacity: 0; transform: translateY(-8px); }
+}
+
+.hidden { display: none !important; }

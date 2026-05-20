@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Spell Crafter Roguelike</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div id="game-root">
+    <canvas id="game-canvas" width="1280" height="720"></canvas>
+
+    <div id="hud">
+      <div id="hud-bars">
+        <div class="bar"><div class="bar-label">HP</div><div class="bar-track"><div id="hp-fill" class="bar-fill hp"></div></div><div id="hp-text" class="bar-text">3 / 3</div></div>
+        <div class="bar"><div class="bar-label">Mana</div><div class="bar-track"><div id="mp-fill" class="bar-fill mp"></div></div><div id="mp-text" class="bar-text">100 / 100</div></div>
+      </div>
+      <div id="hud-info">
+        <div id="floor-indicator">Floor 1</div>
+        <div class="hint">WASD move · Mouse aim · Click cast · 1/2/3 select spell · Q craft</div>
+      </div>
+      <div id="spell-slots">
+        <div class="spell-slot" data-slot="0"><div class="slot-key">1</div><div class="slot-runes"></div><div class="slot-name">—</div></div>
+        <div class="spell-slot" data-slot="1"><div class="slot-key">2</div><div class="slot-runes"></div><div class="slot-name">—</div></div>
+        <div class="spell-slot" data-slot="2"><div class="slot-key">3</div><div class="slot-runes"></div><div class="slot-name">—</div></div>
+      </div>
+    </div>
+
+    <div id="crafter" class="hidden">
+      <div class="crafter-panel">
+        <div class="crafter-header">
+          <h2>Spell Crafter</h2>
+          <button id="crafter-close" title="Close (Q or Esc)">×</button>
+        </div>
+        <div class="crafter-body">
+          <div class="crafter-left">
+            <h3>Runes</h3>
+            <div class="rune-category-group" data-category="element"><h4>Elements</h4><div class="rune-inventory" data-category="element"></div></div>
+            <div class="rune-category-group" data-category="form"><h4>Forms</h4><div class="rune-inventory" data-category="form"></div></div>
+            <div class="rune-category-group" data-category="modifier"><h4>Modifiers</h4><div class="rune-inventory" data-category="modifier"></div></div>
+          </div>
+          <div class="crafter-right">
+            <h3>Recipe</h3>
+            <div class="craft-slots">
+              <div class="craft-slot" data-craft="0"><div class="craft-slot-label">Element</div></div>
+              <div class="craft-slot" data-craft="1"><div class="craft-slot-label">Form</div></div>
+              <div class="craft-slot" data-craft="2"><div class="craft-slot-label">Modifier</div></div>
+            </div>
+            <div id="recipe-preview">
+              <div id="recipe-name">Pick 3 runes…</div>
+              <div id="recipe-stats"></div>
+            </div>
+            <div class="equip-buttons">
+              <button data-equip="0">Equip to Slot 1</button>
+              <button data-equip="1">Equip to Slot 2</button>
+              <button data-equip="2">Equip to Slot 3</button>
+            </div>
+            <button id="craft-clear">Clear</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="game-over" class="hidden">
+      <div class="overlay-panel">
+        <h1>You Died</h1>
+        <p id="game-over-text">Reached Floor 1.</p>
+        <button id="restart-btn">Restart (R)</button>
+      </div>
+    </div>
+
+    <div id="message-log"></div>
+  </div>
+
+  <script type="module" src="src/main.js"></script>
+</body>
+</html>
