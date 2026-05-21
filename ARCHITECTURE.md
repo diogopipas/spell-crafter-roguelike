@@ -15,6 +15,10 @@ index.html  ──► src/main.js  ──► src/game.js  ◄──── the ma
        │             │                 ▼                 ▼               │
        │             │            spells.js  ─────► reactions.js         │
        │             │       (rune composition)   (elemental combos)     │
+       │             │                 │                                 │
+       │             │                 ▼                                 │
+       │             │           trinkets.js                             │
+       │             │        (shop accessories)                         │
        │             │                 │                 │               │
        └─────────────┴─────────────────┴─────────────────┴───────► input.js / ui.js / util.js
 ```
@@ -65,6 +69,7 @@ Per-frame `_update` does, in order:
 - Connects them with L-shaped corridors (random horizontal-first / vertical-first).
 - Adds two extra random corridors so the map isn't a strict chain — gives loops.
 - Places downward stairs in the last room.
+- Tags one middle room as `world.shopRoom`; `game.js` spawns the shopkeeper at its center.
 
 The `World` class also tracks:
 
@@ -74,7 +79,9 @@ The `World` class also tracks:
 
 ### `src/entities.js` — player, enemies, pickups
 
-`createPlayer(x, y)` returns a plain object with HP, mana, three `spellSlots`, an `inventory` (rune id → count), and a `statuses` map.
+`createPlayer(x, y)` returns a plain object with HP, mana, three `spellSlots`, an `inventory` (rune id → count), a `statuses` map, a `gold` counter, and three `trinkets` slots.
+
+`createShopkeeper(x, y)` and `createGoldPickup(x, y, amount)` cover the shop economy. The shopkeeper is a static, non-collidable entity placed at the center of `world.shopRoom`; gold pickups behave like rune pickups but carry a `goldAmount` field instead of a `runeId`.
 
 `createEnemy(subtype, x, y, hpScale)` builds one of three archetypes:
 
@@ -86,7 +93,7 @@ The `World` class also tracks:
 
 `updateEnemy(e, dt, state)` ticks statuses first (`chill` slows; `burn` / `poison` / `shock` DoT; `arcane_mark` ttl-only), then runs subtype-specific AI gated on `aggro` once the player enters sight range.
 
-`spawnEnemiesForFloor` / `spawnChestsForFloor` populate the dungeon. HP scales with floor; new subtypes unlock at floors 2 and 3.
+`spawnEnemiesForFloor` / `spawnChestsForFloor` populate the dungeon. HP scales with floor; new subtypes unlock at floors 2 and 3. Both helpers skip `world.shopRoom` so the shop is always a safe zone.
 
 ### `src/runes.js` — the 5×5×5 system
 
@@ -125,6 +132,15 @@ When cast, the spell builds a `spec` object and hands it to the matching spawner
 | **explodes** | Triggers a `spawnExplosion` on hit/expire. |
 
 `spawnChainArc` is the chain-reaction visualizer: it does direct damage to the next target, routes it through `applyElement` (so chains can also trigger reactions), and pushes a `chainArc` render entry.
+
+### `src/trinkets.js` — passive accessories
+
+A small registry of equippable trinkets sold by the shopkeeper. Each entry is one of two kinds:
+
+- **`mutator`** — has `apply(player)` / `unapply(player)`; called when the trinket is equipped or unequipped. Used for stat-level changes (Max HP, Max Mana, Mana Regen, Move Speed).
+- **`multiplier`** — carries a `multiplier` descriptor (`{ type: 'element'|'cooldown', element?, value }`). Read at use sites via `getElementMultiplier(player, elementId)` (called in `effects.js:applyHit` and `spells.js:spawnChainArc`) and `getCooldownMultiplier(player)` (called in `game.js:_updateCasting`).
+
+The player has three trinket slots (`player.trinkets`). Buying a fourth requires choosing which to swap out.
 
 ### `src/effects.js` — projectiles, AoE, particles
 
@@ -189,7 +205,9 @@ A singleton `input` object holds the live state:
 
 ### `src/ui.js` — HUD + crafter
 
-DOM-side glue. `updateHUD()` syncs the HP/mana bars and spell-slot cards every frame. `openCrafter` / `closeCrafter` toggle the modal; while it's open, input is suspended and runes can be dragged from the inventory into three category-typed craft slots.
+DOM-side glue. `updateHUD()` syncs the HP/mana bars, spell-slot cards, the gold indicator, and the three trinket slot icons every frame. `openCrafter` / `closeCrafter` toggle the rune crafter modal; while it's open, input is suspended and runes can be dragged from the inventory into three category-typed craft slots.
+
+`openShop` / `closeShop` toggle the shop modal — opened when the player presses E within range of the shopkeeper. The shop lists every trinket from `trinkets.js`, marks each as equipped / affordable / too expensive, and handles three flows: equip-to-empty-slot, swap-into-full-loadout (click an equipped slot after buying), and unequip (click an equipped slot when no purchase is pending). Stat mutations are applied via `applyTrinket` / `unapplyTrinket` at the moment of swap.
 
 `flashMessage(text)` pushes a short notification into the on-screen log. `flashReaction(text)` does the same but with the bold yellow `.log-reaction` style — used by `reactions.js` for "Shatter!", "Detonate!", etc.
 
@@ -205,4 +223,5 @@ Generic utilities. `clamp`, `lerp`, `dist`, `angleTo`, `normalize`, `randInt/Ran
 4. The effect is added to `state.effects`. Each frame, `updateEffects` ticks it and checks collisions.
 5. On collision, `applyHit` runs: damage → `applyElement` (status or reaction) → particles → `fx.onHit` (chain jumps, etc.).
 6. `render.js` draws it the next frame; `entities.js:updateEnemy` ticks any status DoTs.
-7. When `target.hp <= 0`, `target.dead = true`. `_cullDead` removes the enemy on the next tick and 40% of the time drops a rune at its location.
+7. When `target.hp <= 0`, `target.dead = true`. `_cullDead` removes the enemy on the next tick, always drops 1–4 gold coins, and 40% of the time also drops a rune at its location.
+8. Gold pickups feed `player.gold`, which is spent at the shopkeeper (one per floor) to equip up to three passive trinkets.

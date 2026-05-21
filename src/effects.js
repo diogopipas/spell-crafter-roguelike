@@ -4,6 +4,7 @@
 import { dist, normalize, randRange, randInt, TAU, angleTo, rotate } from './util.js';
 import { applyElement } from './reactions.js';
 import { playSound } from './audio.js';
+import { getElementMultiplier } from './trinkets.js';
 
 let FX_ID = 1;
 const fxId = () => FX_ID++;
@@ -243,20 +244,95 @@ export function spawnExplosion(state, x, y, radius, damage, color, element, onHi
 }
 
 // Enemy projectile (separate from player effects — hits player only).
-export function spawnEnemyProjectile(state, origin, target) {
-  const dx = target.x - origin.x, dy = target.y - origin.y;
-  const [nx, ny] = normalize(dx, dy);
-  const sp = origin.projectileSpeed || 200;
+// opts (optional): { color, glow, radius, speed, life, damage, angleOffset, status }
+// status: { type: 'chill'|'burn'|'shock'|'poison', factor?, ttl?, dps? } — applied on player hit.
+export function spawnEnemyProjectile(state, origin, target, opts = {}) {
+  let dx = target.x - origin.x, dy = target.y - origin.y;
+  let [nx, ny] = normalize(dx, dy);
+  if (opts.angleOffset) {
+    const ca = Math.cos(opts.angleOffset), sa = Math.sin(opts.angleOffset);
+    const rx = nx * ca - ny * sa;
+    const ry = nx * sa + ny * ca;
+    nx = rx; ny = ry;
+  }
+  const sp = opts.speed ?? origin.projectileSpeed ?? 200;
   state.enemyEffects.push({
     id: fxId(),
     type: 'enemyProjectile',
     x: origin.x, y: origin.y,
     vx: nx * sp, vy: ny * sp,
-    radius: 5,
-    damage: origin.projectileDamage || 1,
-    color: '#a8a0ff',
-    glow: '#c8c0ff',
-    ttl: origin.projectileLife || 1.6,
+    radius: opts.radius ?? 5,
+    damage: opts.damage ?? origin.projectileDamage ?? 1,
+    color: opts.color ?? '#a8a0ff',
+    glow: opts.glow ?? '#c8c0ff',
+    ttl: opts.life ?? origin.projectileLife ?? 1.6,
+    homing: opts.homing ?? 0,            // rad/sec turn rate toward player
+    status: opts.status || null,
+  });
+}
+
+// Telegraphed AoE ring used by bosses (e.g. Cinder Warden inferno nova).
+// Plays a telegraph circle for `telegraph` seconds, then expands to radius and
+// damages the player if they're inside.
+export function spawnBossNova(state, x, y, opts) {
+  state.enemyEffects.push({
+    id: fxId(),
+    type: 'bossNova',
+    x, y,
+    radius: 4,
+    targetRadius: opts.radius ?? 180,
+    growSpeed: (opts.radius ?? 180) / 0.4,
+    damage: opts.damage ?? 2,
+    color: opts.color ?? '#ff7a4a',
+    glow: opts.glow ?? '#ffae74',
+    telegraph: opts.telegraph ?? 0.6,
+    age: 0,
+    ttl: (opts.telegraph ?? 0.6) + 0.55,
+    hit: false,
+    status: opts.status || null,
+  });
+}
+
+// Linear hazard left in place by a boss (fire walls, ice trails).
+// Damages the player on contact with a brief per-hit cooldown.
+export function spawnBossHazard(state, x, y, dx, dy, opts) {
+  state.enemyEffects.push({
+    id: fxId(),
+    type: 'bossHazard',
+    x, y,
+    dx, dy,
+    length: opts.length ?? 120,
+    thickness: opts.thickness ?? 14,
+    damage: opts.damage ?? 1,
+    color: opts.color ?? '#ff7a4a',
+    glow: opts.glow ?? '#ffae74',
+    ttl: opts.ttl ?? 2.5,
+    age: 0,
+    hitCooldown: 0,
+    hitInterval: opts.hitInterval ?? 0.6,
+    status: opts.status || null,
+  });
+}
+
+// Sweeping beam used by Void Lich. Origin point, current angle, angular speed,
+// length. Damages player while inside; ticks every `hitInterval`.
+export function spawnBossBeam(state, x, y, startAngle, opts) {
+  state.enemyEffects.push({
+    id: fxId(),
+    type: 'bossBeam',
+    x, y,
+    angle: startAngle,
+    angularSpeed: opts.angularSpeed ?? 1.4,
+    length: opts.length ?? 360,
+    thickness: opts.thickness ?? 18,
+    damage: opts.damage ?? 1,
+    color: opts.color ?? '#c084ff',
+    glow: opts.glow ?? '#e0a8ff',
+    ttl: opts.ttl ?? 1.6,
+    age: 0,
+    hitCooldown: 0,
+    hitInterval: opts.hitInterval ?? 0.4,
+    telegraph: opts.telegraph ?? 0.3,
   });
 }
 
@@ -320,21 +396,73 @@ export function updateEffects(state, dt) {
     fx.age = (fx.age || 0) + dt;
     fx.ttl -= dt;
     if (fx.type === 'enemyProjectile') {
+      if (fx.homing > 0) {
+        const desired = angleTo(fx.x, fx.y, player.x, player.y);
+        const cur = Math.atan2(fx.vy, fx.vx);
+        let delta = desired - cur;
+        while (delta > Math.PI) delta -= TAU;
+        while (delta < -Math.PI) delta += TAU;
+        const maxTurn = fx.homing * dt;
+        const turn = Math.max(-maxTurn, Math.min(maxTurn, delta));
+        const sp = Math.hypot(fx.vx, fx.vy);
+        const ang = cur + turn;
+        fx.vx = Math.cos(ang) * sp;
+        fx.vy = Math.sin(ang) * sp;
+      }
       fx.x += fx.vx * dt;
       fx.y += fx.vy * dt;
       if (world.pixelBlocked(fx.x, fx.y, fx.radius)) { fx.dead = true; continue; }
       if (dist(fx.x, fx.y, player.x, player.y) < fx.radius + player.radius) {
         state.damagePlayer(fx.damage);
+        applyEnemyStatusToPlayer(player, fx.status);
         fx.dead = true;
       }
     } else if (fx.type === 'enemyExplosion') {
-      const t = Math.min(1, fx.age / 0.2);
       fx.radius = fx.radius + fx.growSpeed * dt;
       if (fx.radius > fx.targetRadius) fx.radius = fx.targetRadius;
       if (!fx.applied && fx.age > 0.05) {
         fx.applied = true;
         if (dist(fx.x, fx.y, player.x, player.y) < fx.targetRadius) {
           state.damagePlayer(fx.damage);
+        }
+      }
+    } else if (fx.type === 'bossNova') {
+      if (fx.age < fx.telegraph) {
+        // Telegraph phase: no growth, no damage.
+      } else {
+        fx.radius = Math.min(fx.targetRadius, fx.radius + fx.growSpeed * dt);
+        if (!fx.hit && fx.age > fx.telegraph + 0.05) {
+          fx.hit = true;
+          if (dist(fx.x, fx.y, player.x, player.y) < fx.targetRadius) {
+            state.damagePlayer(fx.damage);
+            applyEnemyStatusToPlayer(player, fx.status);
+          }
+          state.screenShake = Math.max(state.screenShake, 6);
+        }
+      }
+    } else if (fx.type === 'bossHazard') {
+      if (fx.hitCooldown > 0) fx.hitCooldown -= dt;
+      const half = fx.length / 2;
+      const ax = fx.x - fx.dx * half, ay = fx.y - fx.dy * half;
+      const px = player.x - ax, py = player.y - ay;
+      const t = Math.max(0, Math.min(fx.length, px * fx.dx + py * fx.dy));
+      const cx = ax + fx.dx * t, cy = ay + fx.dy * t;
+      if (dist(cx, cy, player.x, player.y) < player.radius + fx.thickness && fx.hitCooldown <= 0) {
+        state.damagePlayer(fx.damage);
+        applyEnemyStatusToPlayer(player, fx.status);
+        fx.hitCooldown = fx.hitInterval;
+      }
+    } else if (fx.type === 'bossBeam') {
+      if (fx.age >= fx.telegraph) {
+        fx.angle += fx.angularSpeed * dt;
+        if (fx.hitCooldown > 0) fx.hitCooldown -= dt;
+        const dx = Math.cos(fx.angle), dy = Math.sin(fx.angle);
+        const ex = player.x - fx.x, ey = player.y - fx.y;
+        const t = Math.max(0, Math.min(fx.length, ex * dx + ey * dy));
+        const cx = fx.x + dx * t, cy = fx.y + dy * t;
+        if (dist(cx, cy, player.x, player.y) < player.radius + fx.thickness && fx.hitCooldown <= 0) {
+          state.damagePlayer(fx.damage);
+          fx.hitCooldown = fx.hitInterval;
         }
       }
     }
@@ -344,10 +472,25 @@ export function updateEffects(state, dt) {
   }
 }
 
+// Mirror of the rune onHit status application but applied to the player.
+function applyEnemyStatusToPlayer(player, status) {
+  if (!status) return;
+  player.statuses = player.statuses || {};
+  if (status.type === 'chill') {
+    const factor = status.factor ?? 0.5;
+    const ttl = status.ttl ?? 1.2;
+    player.statuses.chill = { factor, ttl };
+  } else if (status.type === 'burn') {
+    const ttl = status.ttl ?? 1.5;
+    player.statuses.burn = { ttl };  // no DoT on player (v1 design — see game.js comment)
+  }
+}
+
 function applyHit(fx, target, state) {
   if (fx.hits && fx.hits.has(target.id)) return false;
   if (fx.hits) fx.hits.add(target.id);
-  target.hp -= fx.damage;
+  const mul = getElementMultiplier(state.player, fx.element?.id);
+  target.hp -= fx.damage * mul;
   target.hitFlash = 0.12;
   if (fx.element) applyElement(fx.element, target, state, fx);
   if (fx.onHit) fx.onHit(fx, target, state);

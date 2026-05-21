@@ -450,6 +450,58 @@ const SOUNDS = {
     harm.start(t); harm.stop(t + 0.75);
   },
 
+  bossEntry: () => {
+    const t = ctx.currentTime;
+    // Cinematic low horn stab: sawtooth fifths sweeping up briefly.
+    const baseFreqs = [55, 82.5, 110];
+    baseFreqs.forEach((f, i) => {
+      const osc = ctx.createOscillator();
+      osc.type = 'sawtooth';
+      osc.frequency.setValueAtTime(f * 0.5, t);
+      osc.frequency.exponentialRampToValueAtTime(f, t + 0.35);
+      const filter = ctx.createBiquadFilter();
+      filter.type = 'lowpass';
+      filter.frequency.setValueAtTime(500 + i * 200, t);
+      filter.frequency.exponentialRampToValueAtTime(1200, t + 0.6);
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0, t);
+      g.gain.linearRampToValueAtTime(0.18, t + 0.08);
+      g.gain.linearRampToValueAtTime(0, t + 1.0);
+      osc.connect(filter).connect(g).connect(sfxGain);
+      osc.start(t); osc.stop(t + 1.1);
+    });
+    // Big tail rumble.
+    const noise = noiseSource();
+    const nf = ctx.createBiquadFilter();
+    nf.type = 'lowpass';
+    nf.frequency.value = 280;
+    const ng = shortEnv(0.24, 0.02, 1.1, t);
+    noise.connect(nf).connect(ng).connect(sfxGain);
+    noise.start(t); noise.stop(t + 1.2);
+  },
+
+  bossDeath: () => {
+    const t = ctx.currentTime;
+    // Long descending bell.
+    const notes = [880, 660, 440, 330, 220];
+    notes.forEach((f, i) => {
+      const start = t + i * 0.18;
+      const carrier = ctx.createOscillator();
+      const mod = ctx.createOscillator();
+      const modGain = ctx.createGain();
+      carrier.type = 'sine'; mod.type = 'sine';
+      carrier.frequency.setValueAtTime(f, start);
+      mod.frequency.setValueAtTime(f * 1.5, start);
+      modGain.gain.setValueAtTime(180, start);
+      modGain.gain.exponentialRampToValueAtTime(2, start + 0.8);
+      mod.connect(modGain).connect(carrier.frequency);
+      const g = shortEnv(0.18, 0.005, 0.9, start);
+      carrier.connect(g).connect(sfxGain);
+      carrier.start(start); carrier.stop(start + 1.0);
+      mod.start(start); mod.stop(start + 1.0);
+    });
+  },
+
   floorDown: () => {
     const t = ctx.currentTime;
     // Descending sine sweep.
@@ -504,6 +556,70 @@ const SCHEDULE_AHEAD_S = 0.25;
 // Minor pentatonic in A (A C D E G), spread across octaves.
 const PENTA_A = [220, 261.63, 293.66, 329.63, 392.00, 440, 523.25, 587.33, 659.25, 783.99];
 
+// Boss music themes. Each theme defines the drone base frequency / fifth ratio,
+// the arp scale (Hz table), tempo, density, and arp note color (oscillator
+// type + filter ratio). setMusicTheme(id) crossfades current theme parameters
+// toward the target — the running oscillators are reused.
+const PHRYG_DOM_E = [82.41, 87.31, 110.00, 123.47, 130.81, 146.83, 164.81, 220, 261.63, 329.63];   // E phrygian dominant — fire boss
+const NAT_MIN_A_HIGH = [220, 246.94, 261.63, 293.66, 329.63, 392.00, 440, 523.25, 659.25, 783.99]; // A natural minor — ice boss
+const CHROMATIC_LICH = [110, 116.54, 138.59, 174.61, 233.08, 261.63, 311.13, 369.99, 415.30, 466.16]; // chromatic clusters — arcane boss
+
+const THEMES = {
+  default: {
+    droneBase: 55, droneFifth: 1.5,
+    filterBase: 320, filterLfoDepth: 180, filterLfoRate: 0.07, filterQ: 4,
+    bpm: 60, density: 0.35,
+    arpScale: PENTA_A, arpType: 'triangle', arpFilterMul: 4, arpRelease: 0.7, arpGain: 0.08,
+    droneType: 'sawtooth',
+  },
+  'boss-cinder': {
+    droneBase: 41.20, droneFifth: 1.498,           // E1 with a slightly flat fifth → menace
+    filterBase: 700, filterLfoDepth: 300, filterLfoRate: 0.5, filterQ: 6,
+    bpm: 132, density: 0.85,
+    arpScale: PHRYG_DOM_E, arpType: 'sawtooth', arpFilterMul: 5, arpRelease: 0.32, arpGain: 0.10,
+    droneType: 'sawtooth',
+  },
+  'boss-frost': {
+    droneBase: 73.42, droneFifth: 1.335,           // D2 with a minor-third overtone for tension
+    filterBase: 1200, filterLfoDepth: 600, filterLfoRate: 0.15, filterQ: 3,
+    bpm: 76, density: 0.55,
+    arpScale: NAT_MIN_A_HIGH, arpType: 'sine', arpFilterMul: 7, arpRelease: 1.1, arpGain: 0.09,
+    droneType: 'sawtooth',
+  },
+  'boss-arcane': {
+    droneBase: 55, droneFifth: 1.414,              // A1 with a tritone overtone — unsettling
+    filterBase: 900, filterLfoDepth: 220, filterLfoRate: 0.25, filterQ: 5,
+    bpm: 108, density: 0.75,
+    arpScale: CHROMATIC_LICH, arpType: 'sine', arpFilterMul: 8, arpRelease: 1.5, arpGain: 0.085,
+    droneType: 'sawtooth',
+  },
+};
+
+let activeTheme = 'default';
+
+export function setMusicTheme(id) {
+  if (!THEMES[id]) return;
+  if (!musicState) {
+    // Music not initialized yet; remember and apply later.
+    activeTheme = id;
+    return;
+  }
+  activeTheme = id;
+  const theme = THEMES[id];
+  const now = ctx.currentTime;
+  // Crossfade drone toward the new theme's base + fifth.
+  musicState.drone.d1.frequency.setTargetAtTime(theme.droneBase, now, 0.7);
+  musicState.drone.d2.frequency.setTargetAtTime(theme.droneBase * 1.005, now, 0.7);
+  musicState.drone.d3.frequency.setTargetAtTime(theme.droneBase * theme.droneFifth, now, 0.7);
+  musicState.drone.filter.frequency.setTargetAtTime(theme.filterBase, now, 0.7);
+  musicState.drone.filter.Q.setTargetAtTime(theme.filterQ, now, 0.7);
+  // LFO depth/rate.
+  musicState.drone.lfoGain.gain.setTargetAtTime(theme.filterLfoDepth, now, 0.6);
+  musicState.drone.lfo.frequency.setTargetAtTime(theme.filterLfoRate, now, 0.6);
+}
+
+export function getActiveTheme() { return activeTheme; }
+
 function startMusic() {
   if (musicStarted) return;
   musicStarted = true;
@@ -544,10 +660,13 @@ function startMusic() {
   lfo.start();
 
   musicState = {
-    drone: { d1, d2, d3, baseFreq: droneBase, filter: droneFilter },
+    drone: { d1, d2, d3, baseFreq: droneBase, filter: droneFilter, lfo, lfoGain },
     nextNoteTime: ctx.currentTime + 0.5,
     beatIndex: 0,
   };
+
+  // Apply any theme that was requested before music was initialized.
+  if (activeTheme !== 'default') setMusicTheme(activeTheme);
 
   setInterval(scheduleArp, SCHEDULE_INTERVAL_MS);
 }
@@ -559,49 +678,52 @@ function scheduleArp() {
   // burst-schedule dozens of past-due notes all at once on refocus.
   if (musicState.nextNoteTime < now) musicState.nextNoteTime = now + 0.05;
 
-  // Read current floor for subtle music shifts.
+  const theme = THEMES[activeTheme] || THEMES.default;
   const floor = (window.__game && window.__game.floor) || 1;
-  // Each floor: slightly faster tempo + lower drone.
-  const bpm = 60 + Math.min(40, (floor - 1) * 3);
-  const beatLen = 60 / bpm;
 
-  // Adjust drone base pitch (slow target — avoids zipper noise).
-  const targetBase = 55 * Math.pow(2, -(floor - 1) * 0.05); // ~half-step down per floor
-  if (musicState.drone) {
+  let bpm = theme.bpm;
+  let density = theme.density;
+  // For the default theme, keep the existing slow tempo ramp by floor.
+  if (activeTheme === 'default') {
+    bpm = 60 + Math.min(40, (floor - 1) * 3);
+    density = 0.35 + Math.min(0.35, (floor - 1) * 0.04);
+    // Gentle floor-driven pitch drift on the drone.
+    const targetBase = 55 * Math.pow(2, -(floor - 1) * 0.05);
     musicState.drone.d1.frequency.setTargetAtTime(targetBase, now, 1.5);
     musicState.drone.d2.frequency.setTargetAtTime(targetBase * 1.005, now, 1.5);
     musicState.drone.d3.frequency.setTargetAtTime(targetBase * 1.5, now, 1.5);
   }
+  const beatLen = 60 / bpm;
 
   while (musicState.nextNoteTime < now + SCHEDULE_AHEAD_S) {
-    // Sparse: only play on some beats.
-    const density = 0.35 + Math.min(0.35, (floor - 1) * 0.04);
     if (Math.random() < density) {
-      const freq = PENTA_A[Math.floor(Math.random() * PENTA_A.length)];
-      playArpNote(freq, musicState.nextNoteTime);
+      const scale = theme.arpScale;
+      const freq = scale[Math.floor(Math.random() * scale.length)];
+      playArpNote(freq, musicState.nextNoteTime, theme);
     }
     musicState.nextNoteTime += beatLen / 2;
     musicState.beatIndex++;
   }
 }
 
-function playArpNote(freq, when) {
-  // Soft triangle pluck with a quick filter sweep.
+function playArpNote(freq, when, theme) {
   const osc = ctx.createOscillator();
-  osc.type = 'triangle';
+  osc.type = theme.arpType;
   osc.frequency.setValueAtTime(freq, when);
 
   const filter = ctx.createBiquadFilter();
   filter.type = 'lowpass';
-  filter.frequency.setValueAtTime(freq * 4, when);
+  filter.frequency.setValueAtTime(freq * theme.arpFilterMul, when);
   filter.frequency.exponentialRampToValueAtTime(freq * 1.5, when + 0.5);
 
+  const release = theme.arpRelease;
+  const peak = theme.arpGain;
   const g = ctx.createGain();
   g.gain.setValueAtTime(0, when);
-  g.gain.linearRampToValueAtTime(0.08, when + 0.02);
-  g.gain.exponentialRampToValueAtTime(0.0001, when + 0.7);
+  g.gain.linearRampToValueAtTime(peak, when + 0.02);
+  g.gain.exponentialRampToValueAtTime(0.0001, when + release);
 
   osc.connect(filter).connect(g).connect(musicGain);
   osc.start(when);
-  osc.stop(when + 0.75);
+  osc.stop(when + release + 0.1);
 }

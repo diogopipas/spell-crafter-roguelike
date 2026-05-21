@@ -31,7 +31,9 @@ export function render(ctx, state) {
   ctx.translate(-cam.x + shakeX, -cam.y + shakeY);
 
   renderTiles(ctx, state);
+  renderBossBarrier(ctx, state);
   renderPickups(ctx, state);
+  renderShopkeeper(ctx, state);
   renderPlayer(ctx, state);
   renderEnemies(ctx, state);
   renderEnemyEffects(ctx, state);
@@ -49,19 +51,25 @@ function renderTiles(ctx, state) {
   const startTy = Math.max(0, Math.floor(camera.y / TILE_SIZE) - 1);
   const endTy = Math.min(world.h, Math.ceil((camera.y + VIEW_H) / TILE_SIZE) + 1);
 
+  // Themed floor colors keyed off world.decor (1 = fire, 2 = ice, 3 = arcane).
+  const DECOR_FLOOR = ['#181826', '#2a1414', '#142233', '#211a2e'];
+  const DECOR_GRID = ['rgba(255,255,255,0.02)', 'rgba(255,140,90,0.06)', 'rgba(160,210,255,0.06)', 'rgba(220,160,255,0.06)'];
+
   for (let ty = startTy; ty < endTy; ty++) {
     for (let tx = startTx; tx < endTx; tx++) {
-      const seen = world.seen[ty * world.w + tx];
+      const idx = ty * world.w + tx;
+      const seen = world.seen[idx];
       if (seen === 0) continue;     // unseen — black
 
       const t = world.get(tx, ty);
       const x = tx * TILE_SIZE, y = ty * TILE_SIZE;
 
       if (t === TILE.FLOOR) {
-        ctx.fillStyle = '#181826';
+        const decor = world.decor ? world.decor[idx] : 0;
+        ctx.fillStyle = DECOR_FLOOR[decor] || DECOR_FLOOR[0];
         ctx.fillRect(x, y, TILE_SIZE, TILE_SIZE);
         // Subtle grid
-        ctx.fillStyle = 'rgba(255,255,255,0.02)';
+        ctx.fillStyle = DECOR_GRID[decor] || DECOR_GRID[0];
         ctx.fillRect(x, y, TILE_SIZE, 1);
         ctx.fillRect(x, y, 1, TILE_SIZE);
       } else if (t === TILE.WALL) {
@@ -141,7 +149,25 @@ function renderEnemies(ctx, state) {
     if (e.statuses.shock) color = blendColor(color, '#ffd84a', 0.3);
     if (e.statuses.arcane_mark) glow = '#e0a8ff';
 
-    drawGlowCircle(ctx, e.x, e.y, e.radius, color, glow, 0.85);
+    const glowStrength = e.isBoss ? 1.4 : 0.85;
+    drawGlowCircle(ctx, e.x, e.y, e.radius, color, glow, glowStrength);
+
+    // Boss extra: a slowly-rotating outer ring to make them feel distinct.
+    if (e.isBoss) {
+      const t = performance.now() / 400;
+      ctx.save();
+      ctx.translate(e.x, e.y);
+      ctx.rotate(t);
+      ctx.strokeStyle = hexWithAlpha(e.glow, 0.5);
+      ctx.lineWidth = 2;
+      for (let i = 0; i < 4; i++) {
+        const a = (i / 4) * TAU;
+        ctx.beginPath();
+        ctx.arc(0, 0, e.radius + 8, a, a + 0.6);
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
 
     if (e.hitFlash > 0) {
       ctx.fillStyle = `rgba(255,255,255,${clamp(e.hitFlash * 3, 0, 1)})`;
@@ -150,13 +176,45 @@ function renderEnemies(ctx, state) {
       ctx.fill();
     }
 
-    // HP bar.
-    const hpw = e.radius * 2;
-    const ratio = clamp(e.hp / e.maxHp, 0, 1);
-    ctx.fillStyle = 'rgba(0,0,0,0.7)';
-    ctx.fillRect(e.x - hpw / 2, e.y - e.radius - 8, hpw, 3);
-    ctx.fillStyle = ratio > 0.5 ? '#7be84a' : ratio > 0.25 ? '#ffd84a' : '#e84545';
-    ctx.fillRect(e.x - hpw / 2, e.y - e.radius - 8, hpw * ratio, 3);
+    // Per-enemy HP bar — suppressed for bosses (the DOM bar handles it).
+    if (!e.isBoss) {
+      const hpw = e.radius * 2;
+      const ratio = clamp(e.hp / e.maxHp, 0, 1);
+      ctx.fillStyle = 'rgba(0,0,0,0.7)';
+      ctx.fillRect(e.x - hpw / 2, e.y - e.radius - 8, hpw, 3);
+      ctx.fillStyle = ratio > 0.5 ? '#7be84a' : ratio > 0.25 ? '#ffd84a' : '#e84545';
+      ctx.fillRect(e.x - hpw / 2, e.y - e.radius - 8, hpw * ratio, 3);
+    }
+  }
+}
+
+function renderBossBarrier(ctx, state) {
+  const bar = state.bossBarrier;
+  if (!bar) return;
+  const t = performance.now() / 200;
+  for (const seg of bar.segments) {
+    const { rectX, rectY, rectW, rectH } = seg;
+    // Outer soft glow.
+    ctx.fillStyle = hexWithAlpha(bar.glow, 0.18);
+    ctx.fillRect(rectX - 4, rectY - 4, rectW + 8, rectH + 8);
+    // Core curtain.
+    ctx.fillStyle = hexWithAlpha(bar.color, 0.55);
+    ctx.fillRect(rectX, rectY, rectW, rectH);
+    // Animated bright bands across the segment.
+    const isHorizontal = seg.axis === 'h';
+    const stride = 14;
+    ctx.fillStyle = hexWithAlpha(bar.glow, 0.85);
+    if (isHorizontal) {
+      const span = rectW;
+      for (let x = (t * 30) % stride - stride; x < span; x += stride) {
+        ctx.fillRect(rectX + x, rectY + 2, 4, rectH - 4);
+      }
+    } else {
+      const span = rectH;
+      for (let y = (t * 30) % stride - stride; y < span; y += stride) {
+        ctx.fillRect(rectX + 2, rectY + y, rectW - 4, 4);
+      }
+    }
   }
 }
 
@@ -167,17 +225,60 @@ function renderPickups(ctx, state) {
     const tile = state.world.seen[Math.floor(p.y / TILE_SIZE) * state.world.w + Math.floor(p.x / TILE_SIZE)];
     if (tile === 0) continue;
     const bob = Math.sin(t + p.bobPhase) * 2;
-    // Get color from rune.
+
+    if (p.goldAmount) {
+      // Gold coin pickup.
+      const r = p.radius;
+      drawGlowCircle(ctx, p.x, p.y + bob, r, '#ffd84a', '#fff09a', 0.9);
+      ctx.fillStyle = '#7a5d10';
+      ctx.font = 'bold 9px monospace';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('$', p.x, p.y + bob + 1);
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'alphabetic';
+      continue;
+    }
+
+    // Rune pickup.
     const rune = state.runesById[p.runeId];
     const color = rune?.color || '#fff';
     const glow = rune?.glow || '#fff';
     drawGlowCircle(ctx, p.x, p.y + bob, p.radius, color, glow, 1.0);
-    // Hint ring.
     ctx.strokeStyle = `rgba(255,255,255,${0.3 + 0.2 * Math.sin(t * 2 + p.bobPhase)})`;
     ctx.lineWidth = 1.5;
     ctx.beginPath();
     ctx.arc(p.x, p.y + bob, p.radius + 4, 0, TAU);
     ctx.stroke();
+  }
+}
+
+function renderShopkeeper(ctx, state) {
+  const s = state.shopkeeper;
+  if (!s) return;
+  const tile = state.world.seen[Math.floor(s.y / TILE_SIZE) * state.world.w + Math.floor(s.x / TILE_SIZE)];
+  if (tile === 0) return;
+  const t = performance.now() / 500;
+  const bob = Math.sin(t) * 1.5;
+  drawGlowCircle(ctx, s.x, s.y + bob, s.radius, '#d4c47a', '#ffe88a', 1.0);
+  ctx.fillStyle = '#11111c';
+  ctx.font = 'bold 14px serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('$', s.x, s.y + bob + 1);
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'alphabetic';
+
+  if (state._nearShop) {
+    ctx.fillStyle = 'rgba(20, 20, 30, 0.85)';
+    ctx.fillRect(s.x - 50, s.y - s.radius - 24, 100, 16);
+    ctx.fillStyle = '#ffe88a';
+    ctx.font = 'bold 11px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('Press E to shop', s.x, s.y - s.radius - 16);
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'alphabetic';
   }
 }
 
@@ -265,6 +366,51 @@ function renderEnemyEffects(ctx, state) {
       ctx.strokeStyle = `rgba(255, 184, 104, ${1 - t})`;
       ctx.lineWidth = 3;
       ctx.beginPath(); ctx.arc(fx.x, fx.y, fx.radius, 0, TAU); ctx.stroke();
+    } else if (fx.type === 'bossNova') {
+      if (fx.age < fx.telegraph) {
+        // Telegraph ring: pulsing dashed circle at target radius.
+        const pulse = 0.5 + 0.5 * Math.sin(fx.age * 16);
+        ctx.strokeStyle = hexWithAlpha(fx.glow, 0.25 + 0.35 * pulse);
+        ctx.lineWidth = 3;
+        ctx.setLineDash([8, 8]);
+        ctx.beginPath();
+        ctx.arc(fx.x, fx.y, fx.targetRadius, 0, TAU);
+        ctx.stroke();
+        ctx.setLineDash([]);
+      } else {
+        const t = fx.radius / fx.targetRadius;
+        ctx.fillStyle = hexWithAlpha(fx.glow, (1 - t) * 0.35);
+        ctx.beginPath(); ctx.arc(fx.x, fx.y, fx.radius, 0, TAU); ctx.fill();
+        ctx.strokeStyle = hexWithAlpha(fx.color, 1 - t);
+        ctx.lineWidth = 4;
+        ctx.beginPath(); ctx.arc(fx.x, fx.y, fx.radius, 0, TAU); ctx.stroke();
+      }
+    } else if (fx.type === 'bossHazard') {
+      const alpha = clamp(fx.ttl / 2.5, 0.2, 1);
+      const half = fx.length / 2;
+      const ax = fx.x - fx.dx * half, ay = fx.y - fx.dy * half;
+      const bx = fx.x + fx.dx * half, by = fx.y + fx.dy * half;
+      ctx.strokeStyle = hexWithAlpha(fx.glow, alpha * 0.4);
+      ctx.lineWidth = fx.thickness * 2.4;
+      ctx.lineCap = 'round';
+      ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx, by); ctx.stroke();
+      ctx.strokeStyle = hexWithAlpha(fx.color, alpha);
+      ctx.lineWidth = fx.thickness;
+      ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx, by); ctx.stroke();
+      ctx.lineCap = 'butt';
+    } else if (fx.type === 'bossBeam') {
+      const isTele = fx.age < fx.telegraph;
+      const alpha = isTele ? 0.4 + 0.4 * Math.sin(fx.age * 14) : clamp(fx.ttl / 1.6, 0.3, 1);
+      const dx = Math.cos(fx.angle), dy = Math.sin(fx.angle);
+      const ex = fx.x + dx * fx.length, ey = fx.y + dy * fx.length;
+      ctx.strokeStyle = hexWithAlpha(fx.glow, alpha * 0.45);
+      ctx.lineWidth = (isTele ? fx.thickness * 0.6 : fx.thickness * 2.4);
+      ctx.lineCap = 'round';
+      ctx.beginPath(); ctx.moveTo(fx.x, fx.y); ctx.lineTo(ex, ey); ctx.stroke();
+      ctx.strokeStyle = hexWithAlpha(fx.color, alpha);
+      ctx.lineWidth = (isTele ? 2 : fx.thickness);
+      ctx.beginPath(); ctx.moveTo(fx.x, fx.y); ctx.lineTo(ex, ey); ctx.stroke();
+      ctx.lineCap = 'butt';
     }
   }
 }

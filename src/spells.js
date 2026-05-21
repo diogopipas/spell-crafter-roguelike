@@ -4,6 +4,7 @@
 import { RUNES, CATEGORY } from './runes.js';
 import { spawnProjectile, spawnNova, spawnBeam, spawnAura, spawnWall, spawnExplosion, nearestEnemy } from './effects.js';
 import { applyElement } from './reactions.js';
+import { getElementMultiplier } from './trinkets.js';
 import { normalize, angleTo, TAU, dist } from './util.js';
 
 // Validate that the trio covers each category exactly once.
@@ -188,7 +189,8 @@ function spawnChainArc(state, fromEnt, toEnt, element, damage, chainsLeft) {
   const len = Math.hypot(dx, dy);
 
   // Direct damage to the next target.
-  toEnt.hp -= damage;
+  const mul = getElementMultiplier(state.player, element?.id);
+  toEnt.hp -= damage * mul;
   toEnt.hitFlash = 0.12;
   applyElement(element, toEnt, state, null);
   if (toEnt.hp <= 0) toEnt.dead = true;

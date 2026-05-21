@@ -27,6 +27,8 @@ export function createPlayer(x, y) {
     statuses: {},
     iframes: 0,
     dead: false,
+    gold: 0,
+    trinkets: [null, null, null],   // equipped trinket ids
   };
 }
 
@@ -98,10 +100,10 @@ export function createEnemy(subtype, x, y, hpScale = 1) {
   };
 }
 
-export function updateEnemy(e, dt, state) {
-  if (e.dead) return;
-
-  // Apply statuses.
+// Tick all status effects on an enemy/boss: status DoTs, chill decay, hit-flash, death.
+// Returns the speed multiplier from chill (1 if none). After this call, callers
+// must early-return if e.dead is true.
+export function tickStatuses(e, dt) {
   let speedMul = 1;
   if (e.statuses.chill) {
     e.statuses.chill.ttl -= dt;
@@ -127,8 +129,16 @@ export function updateEnemy(e, dt, state) {
     e.statuses.arcane_mark.ttl -= dt;
     if (e.statuses.arcane_mark.ttl <= 0) delete e.statuses.arcane_mark;
   }
-  if (e.hp <= 0) { e.dead = true; return; }
+  if (e.hp <= 0) { e.dead = true; return speedMul; }
   if (e.hitFlash > 0) e.hitFlash -= dt;
+  return speedMul;
+}
+
+export function updateEnemy(e, dt, state) {
+  if (e.dead) return;
+
+  const speedMul = tickStatuses(e, dt);
+  if (e.dead) return;
 
   const player = state.player;
   const d = dist(e.x, e.y, player.x, player.y);
@@ -189,6 +199,28 @@ export function createPickup(x, y, runeId) {
   };
 }
 
+export function createGoldPickup(x, y, amount) {
+  return {
+    id: nextId(),
+    kind: 'pickup',
+    x, y,
+    radius: 8,
+    goldAmount: amount,
+    bobPhase: Math.random() * TAU,
+    consumed: false,
+  };
+}
+
+// ===== Shopkeeper =====
+export function createShopkeeper(x, y) {
+  return {
+    id: nextId(),
+    kind: 'shopkeeper',
+    x, y,
+    radius: 12,
+  };
+}
+
 // ===== Spawning helpers =====
 export function spawnEnemiesForFloor(world, floor, rng = Math.random) {
   // skip room 0 (player spawn), populate the rest.
@@ -200,6 +232,8 @@ export function spawnEnemiesForFloor(world, floor, rng = Math.random) {
 
   for (let i = 1; i < world.rooms.length; i++) {
     const r = world.rooms[i];
+    if (r === world.shopRoom) continue;   // no enemies inside the shop
+    if (r === world.bossRoom) continue;   // boss room only contains the boss
     const count = clamp(1 + Math.floor((floor + i) / 3), 1, 4);
     for (let j = 0; j < count; j++) {
       const tx = r.x + 1 + Math.floor(rng() * (r.w - 2));
@@ -214,8 +248,8 @@ export function spawnEnemiesForFloor(world, floor, rng = Math.random) {
 
 export function spawnChestsForFloor(world, runeIds, rng = Math.random) {
   const pickups = [];
-  // 1–2 chests per floor in non-spawn rooms.
-  const candidates = world.rooms.slice(1);
+  // 1–2 chests per floor in non-spawn, non-shop rooms.
+  const candidates = world.rooms.slice(1).filter(r => r !== world.shopRoom && r !== world.bossRoom);
   for (let i = 0; i < 2; i++) {
     if (candidates.length === 0) break;
     const r = candidates[Math.floor(rng() * candidates.length)];

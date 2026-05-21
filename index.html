@@ -16,7 +16,19 @@
       </div>
       <div id="hud-info">
         <div id="floor-indicator">Floor 1</div>
-        <div class="hint">WASD move · Mouse aim · Click cast · 1/2/3 select spell · Q craft</div>
+        <div id="gold-indicator">Gold: 0</div>
+        <div class="hint">WASD move · Mouse aim · Click cast · 1/2/3 select spell · Q craft · E shop</div>
+      </div>
+
+      <div id="boss-bar" class="hidden">
+        <div id="boss-name">Boss</div>
+        <div class="bar-track"><div id="boss-fill" class="bar-fill boss"></div></div>
+      </div>
+
+      <div id="trinket-slots">
+        <div class="trinket-slot" data-trinket="0"></div>
+        <div class="trinket-slot" data-trinket="1"></div>
+        <div class="trinket-slot" data-trinket="2"></div>
       </div>
       <div id="spell-slots">
         <div class="spell-slot" data-slot="0"><div class="slot-key">1</div><div class="slot-runes"></div><div class="slot-name">—</div></div>
@@ -66,11 +78,68 @@
       </div>
     </div>
 
+    <div id="shop" class="hidden">
+      <div class="shop-panel">
+        <div class="shop-header">
+          <h2>Wandering Merchant</h2>
+          <div id="shop-gold">Gold: 0</div>
+          <button id="shop-close" title="Close (Esc)">×</button>
+        </div>
+        <div class="shop-body">
+          <div class="shop-left">
+            <h3>Wares</h3>
+            <div id="shop-items"></div>
+          </div>
+          <div class="shop-right">
+            <h3>Equipped</h3>
+            <div id="shop-equipped">
+              <div class="trinket-equip-slot" data-equip="0"></div>
+              <div class="trinket-equip-slot" data-equip="1"></div>
+              <div class="trinket-equip-slot" data-equip="2"></div>
+            </div>
+            <div id="shop-hint">Click an equipped trinket to unequip it.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <div id="title-screen">
       <div class="overlay-panel">
         <h1>Spell Crafter</h1>
         <p>A rune-crafting roguelike. Combine elements, forms, and modifiers.</p>
-        <button id="play-btn">Play (Space)</button>
+        <div class="title-buttons">
+          <button id="continue-btn" class="hidden">Continue Run</button>
+          <button id="play-btn">Play (Space)</button>
+          <button id="meta-btn">Meta Progression</button>
+          <button id="stats-btn">Stats</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="meta-menu" class="hidden">
+      <div class="overlay-panel meta-panel">
+        <div class="meta-header">
+          <h1>Meta Progression</h1>
+          <div id="meta-shards">Soul Shards: 0</div>
+          <button id="meta-close" title="Close">×</button>
+        </div>
+        <div class="meta-body">
+          <section class="meta-section"><h3>Elements</h3><div class="meta-grid" data-meta-group="element"></div></section>
+          <section class="meta-section"><h3>Forms</h3><div class="meta-grid" data-meta-group="form"></div></section>
+          <section class="meta-section"><h3>Modifiers</h3><div class="meta-grid" data-meta-group="modifier"></div></section>
+          <section class="meta-section"><h3>Trinkets</h3><div class="meta-grid" data-meta-group="trinket"></div></section>
+        </div>
+      </div>
+    </div>
+
+    <div id="stats-screen" class="hidden">
+      <div class="overlay-panel stats-panel">
+        <div class="meta-header">
+          <h1>Run Stats</h1>
+          <button id="stats-close" title="Close">×</button>
+        </div>
+        <div id="stats-body"></div>
+        <button id="stats-reset" class="danger">Reset All Progress</button>
       </div>
     </div>
 
